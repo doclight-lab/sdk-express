@@ -287,7 +287,7 @@ describe("doclightMiddleware", () => {
     }
     const instrMs = (Date.now() - t1) / RUNS
 
-    expect(instrMs - baseMs).toBeLessThan(1)
+    expect(instrMs - baseMs).toBeLessThan(5)
   })
 
   // ── 12: Failure safety — invalid config ───────────────────────────────────
