@@ -5,9 +5,10 @@
 import { execFileSync } from "node:child_process"
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
-const root = resolve(import.meta.dirname, "..")
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const arg = process.argv.find((a) => a.startsWith("--express="))
 const versions = arg ? [arg.slice("--express=".length)] : ["4", "5"]
 const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, stdio: ["ignore", "pipe", "inherit"], encoding: "utf8" })
