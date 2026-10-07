@@ -1,0 +1,111 @@
+# PROPOSED replacement for .github/workflows/release.yml (trusted maintainer must install).
+# Not active: docs/ files are never executed by GitHub Actions.
+name: Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to (re)publish, e.g. v0.1.1
+        required: true
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    if: github.event_name == 'push' && github.repository == 'doclight-lab/sdk-express'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+      sha: ${{ steps.rp.outputs.sha }}
+      version: ${{ steps.rp.outputs.version }}
+    steps:
+      # PROJECTS_TOKEN (not GITHUB_TOKEN) so the release PR triggers CI and Codex review.
+      # Needs contents + pull-requests write on this repo only.
+      - id: rp
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.PROJECTS_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    if: >-
+      always() && (
+        (needs.release-please.outputs.release_created == 'true') ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || github.event.inputs.tag }}
+    steps:
+      - name: Validate tag format
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad tag"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - name: Verify tag identity and version
+        run: |
+          if [ -n "${{ needs.release-please.outputs.sha }}" ]; then
+            [ "$(git rev-parse HEAD)" = "${{ needs.release-please.outputs.sha }}" ] || { echo "sha mismatch"; exit 1; }
+          fi
+          git merge-base --is-ancestor HEAD origin/main || { echo "tag not on main"; exit 1; }
+          [ "v$(node -p "require('./package.json').version")" = "$TAG" ] || { echo "version mismatch"; exit 1; }
+          [ "$(node -p "require('./package.json').name")" = "@doclight/express" ] || exit 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm validate:consumer
+      - name: Require published @doclight/node dependency
+        run: |
+          range=$(node -p "require('./package.json').dependencies['@doclight/node']")
+          [ -n "$(npm view "@doclight/node@$range" version)" ] || { echo "dependency not on npm"; exit 1; }
+      - name: Check NPM_TOKEN presence (value never printed)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          [ -n "$NODE_AUTH_TOKEN" ] || { echo "NPM_TOKEN secret missing"; exit 1; }
+          npm whoami >/dev/null || { echo "NPM_TOKEN unusable"; exit 1; }
+      - name: Pack and inspect tarball
+        run: |
+          npm pack --json > pack.json
+          node -e "
+            const f=require('./pack.json')[0].files.map(x=>x.path);
+            const bad=f.filter(p=>!/^(dist\/|package\.json|README\.md|CHANGELOG\.md|LICENSE)/.test(p));
+            if(bad.length){console.error('unexpected files',bad);process.exit(1)}
+          "
+      - name: Publish (idempotent)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version="${TAG#v}"
+          set +e
+          out=$(npm view "@doclight/express@$version" version 2>&1); rc=$?
+          set -e
+          if [ $rc -eq 0 ] && [ "$out" = "$version" ]; then
+            echo "Version $version already published; skipping."; exit 0
+          fi
+          if ! echo "$out" | grep -q E404; then
+            echo "Registry lookup failed (not a not-found): $out"; exit 1
+          fi
+          npm publish --access public
