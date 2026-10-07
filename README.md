@@ -26,6 +26,22 @@ app.get("/api/items", handler)
 app.post("/api/orders", handler)
 ```
 
+## Graceful shutdown
+
+The middleware exposes bounded `flush(timeoutMs?)` and `shutdown(timeoutMs?)` (default 5000 ms). Both never reject and resolve within the timeout even if ingestion is unreachable:
+
+```ts
+const doclight = doclightMiddleware({ apiKey, projectId })
+app.use(doclight)
+process.once("SIGTERM", () => { server.close(); void doclight.shutdown().finally(() => process.exit(0)) })
+```
+
+A runnable example is in [`examples/server.mjs`](examples/server.mjs); an agent-facing integration guide is in [`skills/doclight-express`](skills/doclight-express/SKILL.md).
+
+## Compatibility
+
+Express `^4.0.0 || ^5.0.0` (peer), Node `>=18`. `pnpm validate:consumer` packs the package, installs the tarball into a clean project with Express 4 and 5, and runs ESM and CommonJS consumers against a local ingestion sink (privacy, error handlers, exactly-once events, bounded shutdown).
+
 ## Options
 
 ```ts
