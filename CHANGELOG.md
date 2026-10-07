@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Release Please configuration and release runbook (workflow swap pending trusted maintainer).
+
 - Middleware exposes bounded `flush()` / `shutdown()`.
 - `pnpm validate:consumer`: packed-tarball consumer validation (Express 4/5, ESM/CJS); runnable example and integration skill.
 - Agent-only collection by default (`express.collect`: `agents` | `all` | `none`); conservative bot User-Agent classification marked observed/untrusted.
