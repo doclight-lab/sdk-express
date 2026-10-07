@@ -52,6 +52,11 @@ If your AI agent sets `x-doclight-session-id` on outbound HTTP requests, the mid
 
 One `api_called` event per request: route pattern, HTTP method, status, duration, error type, and session/agent IDs from headers. **Request bodies, response bodies, query parameters, and header values are never captured.**
 
+## Source and issues
+
+- Source: https://github.com/doclight-lab/sdk-express
+- Issues: https://github.com/doclight-lab/sdk-express/issues
+
 ## License
 
 MIT
