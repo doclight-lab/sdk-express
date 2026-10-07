@@ -16,7 +16,32 @@ type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTION
 
 type Outcome = "completed" | "aborted" | "stream_error"
 
-export function doclightMiddleware(config: DoclightMiddlewareConfig) {
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000
+
+export interface DoclightExpressMiddleware {
+  (req: Request, res: Response, next: NextFunction): void
+  /** Flush queued events; never rejects and resolves within `timeoutMs`. */
+  flush(timeoutMs?: number): Promise<void>
+  /** Flush and stop the client; never rejects and resolves within `timeoutMs`. */
+  shutdown(timeoutMs?: number): Promise<void>
+}
+
+async function bounded(task: () => Promise<void>, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      task().catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, Math.max(0, timeoutMs))
+        timer.unref?.()
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+export function doclightMiddleware(config: DoclightMiddlewareConfig): DoclightExpressMiddleware {
   const { express: expressOpts = {}, ...doclightConfig } = config
   const {
     collect = "agents",
@@ -31,7 +56,7 @@ export function doclightMiddleware(config: DoclightMiddlewareConfig) {
 
   const client = createDoclight({ lifecycleHooks: false, ...doclightConfig })
 
-  return function doclightHandler(req: Request, res: Response, next: NextFunction): void {
+  const handler = function doclightHandler(req: Request, res: Response, next: NextFunction): void {
     try {
       if (collect === "none" || !METHODS.has(req.method)) {
         next()
@@ -119,4 +144,9 @@ export function doclightMiddleware(config: DoclightMiddlewareConfig) {
       next()
     }
   }
+
+  return Object.assign(handler, {
+    flush: (timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS) => bounded(() => client.flush(), timeoutMs),
+    shutdown: (timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS) => bounded(() => client.shutdown(), timeoutMs),
+  })
 }
