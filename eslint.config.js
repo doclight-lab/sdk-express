@@ -7,4 +7,15 @@ export default tseslint.config(
   {
     ignores: ["**/dist/**", "**/node_modules/**"],
   },
+  {
+    rules: {
+      // Express decides a middleware is an error handler by its arity, so the
+      // unused `next` parameter has to stay declared. The codebase marks every
+      // deliberately unused binding with a leading underscore.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
 )
