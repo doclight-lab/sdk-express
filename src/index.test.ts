@@ -83,6 +83,7 @@ function cfg(endpoint: string, overrides?: object) {
     projectId: "proj_express_test",
     endpoint,
     transport: { batchSize: 1, flushIntervalMs: 60_000, retries: 0 },
+    express: { collect: "all" },
     ...overrides,
   } as const
 }
@@ -216,7 +217,7 @@ describe("doclightMiddleware", () => {
     app.use(
       doclightMiddleware({
         ...cfg(sink.baseUrl),
-        express: { ignoreRoutes: ["/healthz"] },
+        express: { collect: "all", ignoreRoutes: ["/healthz"] },
       }),
     )
     app.get("/healthz", (_req: Request, res: Response) => res.json({ ok: true }))
@@ -238,7 +239,7 @@ describe("doclightMiddleware", () => {
     app.use(
       doclightMiddleware({
         ...cfg(sink.baseUrl),
-        express: { ignoreUserAgents: ["Googlebot"] },
+        express: { collect: "all", ignoreUserAgents: ["Googlebot"] },
       }),
     )
     app.get("/page", (_req: Request, res: Response) => res.json({}))
